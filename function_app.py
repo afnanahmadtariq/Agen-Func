@@ -1,35 +1,7 @@
-# import azure.functions as func
-# import logging
-
-# app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
-
-# @app.route(route="agen")
-# def agen(req: func.HttpRequest) -> func.HttpResponse:
-#     logging.info('Python HTTP trigger function processed a request.')
-
-#     name = req.params.get('name')
-#     if not name:
-#         try:
-#             req_body = req.get_json()
-#         except ValueError:
-#             pass
-#         else:
-#             name = req_body.get('name')
-
-#     if name:
-#         return func.HttpResponse(f"Hello, {name}. This HTTP triggered function executed successfully.")
-#     else:
-#         return func.HttpResponse(
-#              "This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response.",
-#              status_code=200
-#         )
-
-
-
+import gzip
 import logging
 import nltk
 import os
-import pdfkit
 from rake_nltk import Rake
 from bs4 import BeautifulSoup
 import urllib.request
@@ -38,12 +10,15 @@ import random
 import chardet
 import re
 import azure.functions as func
+import PyPDF2
+import io
 
-# Set NLTK data directory
-nltk_data_dir = os.path.join(os.getenv('HOME'), 'nltk_data')
+# Set NLTK data directory to a temporary directory
+nltk_data_dir = '/tmp/nltk_data'
+os.makedirs(nltk_data_dir, exist_ok=True)
 nltk.data.path.append(nltk_data_dir)
 
-# Download NLTK stopwords corpus and punkt tokenizer
+# Download NLTK stopwords corpus and punkt tokenizer if not already downloaded
 nltk.download('stopwords', download_dir=nltk_data_dir)
 nltk.download('punkt', download_dir=nltk_data_dir)
 
@@ -56,14 +31,41 @@ def search_images(keywords, num_images=4):
     return images
 
 def fetch_content(url, encoding='utf-8'):
-    response = urllib.request.urlopen(url)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+        'Referer': 'https://www.google.com',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+    }
+    req = urllib.request.Request(url, headers=headers)
+    response = urllib.request.urlopen(req)
+    content_encoding = response.info().get('Content-Encoding')
+    
+    if 'application/pdf' in response.info().get('Content-Type'):
+        pdf_data = response.read()
+        return extract_text_from_pdf(pdf_data)
+    
     html = response.read()
-    encoding = chardet.detect(html)['encoding']
-    return html.decode(encoding)
+    
+    if content_encoding == 'gzip':
+        html = gzip.decompress(html)
+    elif content_encoding == 'deflate':
+        html = zlib.decompress(html)
+
+    detected_encoding = chardet.detect(html)['encoding']
+    return html.decode(detected_encoding or encoding)
+
+def extract_text_from_pdf(pdf_data):
+    reader = PyPDF2.PdfReader(io.BytesIO(pdf_data))
+    text = ""
+    for page in reader.pages:
+        text += page.extract_text()
+    return text
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
-@app.route(route="assgenfunc")
-def assgenfunc(req: func.HttpRequest) -> func.HttpResponse:
+
+@app.route(route="agen")
+def agen(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
 
     user_input = req.params.get('question')
@@ -88,7 +90,7 @@ def assgenfunc(req: func.HttpRequest) -> func.HttpResponse:
     related_urls = []
     try:
         for keyword in keywords:
-            for url in search(keyword, num=15, stop=15):
+            for url in search(keyword, num_results=15):
                 related_urls.append(url)
     except Exception as e:
         logging.error(f"Error fetching search results: {e}")
@@ -96,28 +98,32 @@ def assgenfunc(req: func.HttpRequest) -> func.HttpResponse:
     relevant_content = ""
     for url in related_urls:
         try:
-            html = fetch_content(url)
-            soup = BeautifulSoup(html, 'html.parser')
-            paragraphs = [tag.get_text().strip() for tag in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li'])]
-            relevant_paragraphs = []
-            for paragraph in paragraphs:
-                if any(keyword.lower() in paragraph.lower() for keyword in keywords):
-                    relevant_paragraphs.append(paragraph)
-                    if len(relevant_paragraphs) == 3:
-                        break
-            if relevant_paragraphs:
-                relevant_content += '\n\n'.join(relevant_paragraphs) + '\n\n'
+            content = fetch_content(url)
+            if url.endswith('.pdf'):
+                relevant_content += content + '\n\n'
+            else:
+                soup = BeautifulSoup(content, 'html.parser')
+                paragraphs = [tag.get_text().strip() for tag in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li'])]
+                relevant_paragraphs = []
+                for paragraph in paragraphs:
+                    if any(keyword.lower() in paragraph.lower() for keyword in keywords):
+                        relevant_paragraphs.append(paragraph)
+                        if len(relevant_paragraphs) == 3:
+                            break
+                if relevant_paragraphs:
+                    relevant_content += '\n\n'.join(relevant_paragraphs) + '\n\n'
         except Exception as e:
             logging.error(f"Error fetching content from {url}: {e}")
 
     references = []
     for url in related_urls:
         try:
-            html = fetch_content(url, encoding='utf-8')
-            soup = BeautifulSoup(html, 'html.parser')
-            for link in soup.find_all('a', href=True):
-                if 'http' in link['href']:
-                    references.append(link['href'])
+            content = fetch_content(url, encoding='utf-8')
+            if not url.endswith('.pdf'):
+                soup = BeautifulSoup(content, 'html.parser')
+                for link in soup.find_all('a', href=True):
+                    if 'http' in link['href']:
+                        references.append(link['href'])
         except Exception as e:
             logging.error(f"Error fetching references from {url}: {e}")
 

@@ -9,4 +9,5 @@ beautifulsoup4
 urllib3
 googlesearch-python
 chardet
+PyPDF2
 azure-functions
