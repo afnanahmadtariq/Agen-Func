@@ -90,7 +90,7 @@ def agen(req: func.HttpRequest) -> func.HttpResponse:
     related_urls = []
     try:
         for keyword in keywords:
-            for url in search(keyword, num_results=15):
+            for url in search(keyword, num_results=5):
                 related_urls.append(url)
     except Exception as e:
         logging.error(f"Error fetching search results: {e}")
