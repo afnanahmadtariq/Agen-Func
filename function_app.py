@@ -53,7 +53,13 @@ def fetch_content(url, encoding='utf-8'):
         html = zlib.decompress(html)
 
     detected_encoding = chardet.detect(html)['encoding']
-    return html.decode(detected_encoding or encoding)
+    try:
+        return html.decode(detected_encoding or encoding)
+    except UnicodeDecodeError:
+        try:
+            return html.decode('latin-1')  # Fallback to latin-1
+        except UnicodeDecodeError:
+            return html.decode('utf-8', errors='ignore') # Ignore errors and decode
 
 def extract_text_from_pdf(pdf_data):
     reader = PyPDF2.PdfReader(io.BytesIO(pdf_data))
@@ -73,14 +79,14 @@ def agen(req: func.HttpRequest) -> func.HttpResponse:
         try:
             req_body = req.get_json()
         except ValueError:
-            pass
+            req_body = None 
         else:
             user_input = req_body.get('question')
 
     if not user_input:
         return func.HttpResponse(
-             "Please pass an assignment question on the query string or in the request body",
-             status_code=400
+            "Please pass an assignment question on the query string or in the request body",
+            status_code=400
         )
 
     r = Rake()
