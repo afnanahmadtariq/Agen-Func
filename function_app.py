@@ -74,53 +74,61 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 def agen(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
 
-
     user_input = req.params.get('question')
     if not user_input:
         try:
             req_body = req.get_json()
         except ValueError:
-            req_body = None 
-        else:
-            user_input = req_body.get('question')
-        if not user_input:
-            return func.HttpResponse(
-                "Please pass an assignment question on the query string or in the request body",
-                status_code=400
-            )
+            req_body = None
+    else:
+        user_input = req_body.get('question')
+    if not user_input:
+        return func.HttpResponse(
+            "Please pass an assignment question on the query string or in the request body",
+            status_code=400
+        )
     template = req.params.get('template')
-
+    
     r = Rake()
     r.extract_keywords_from_text(user_input)
     keywords = r.get_ranked_phrases()
 
     related_urls = []
-    try:
-        for keyword in keywords:
-            for url in search(keyword, num_results=5):
-                related_urls.append(url)
-    except Exception as e:
-        logging.error(f"Error fetching search results: {e}")
+    async def fetch_search_results():
+        try:
+            for keyword in keywords:
+                for url in search(keyword, num_results=5):
+                    related_urls.append(url)
+        except Exception as e:
+            logging.error(f"Error fetching search results: {e}")
+
+    asyncio.run(fetch_search_results())
 
     relevant_content = ""
     for url in related_urls:
-        try:
-            content = fetch_content(url)
-            if url.endswith('.pdf'):
-                relevant_content += content + '\n\n'
-            else:
-                soup = BeautifulSoup(content, 'html.parser')
-                paragraphs = [tag.get_text().strip() for tag in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li'])]
-                relevant_paragraphs = []
-                for paragraph in paragraphs:
-                    if any(keyword.lower() in paragraph.lower() for keyword in keywords):
-                        relevant_paragraphs.append(paragraph)
-                        if len(relevant_paragraphs) == 3:
-                            break
-                if relevant_paragraphs:
-                    relevant_content += '\n\n'.join(relevant_paragraphs) + '\n\n'
-        except Exception as e:
-            logging.error(f"Error fetching content from {url}: {e}")
+        async def fetch_url_content():
+            try:
+                content = await fetch_content(url)
+                if url.endswith('.pdf'):
+                    return extract_text_from_pdf(content)
+                else:
+                    soup = BeautifulSoup(content, 'html.parser')
+                    paragraphs = [tag.get_text().strip() for tag in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li'])]
+                    relevant_paragraphs = []
+                    for paragraph in paragraphs:
+                        if any(keyword.lower() in paragraph.lower() for keyword in keywords):
+                            relevant_paragraphs.append(paragraph)
+                            if len(relevant_paragraphs) == 3:
+                                break
+                    if relevant_paragraphs:
+                        relevant_content += '\n\n'.join(relevant_paragraphs) + '\n\n'
+            except Exception as e:
+                logging.error(f"Error fetching content from {url}: {e}")
+                return ""
+
+        content = asyncio.run(fetch_url_content())
+        if content:
+            relevant_content += content + '\n\n'
 
     references = []
     for url in related_urls:
