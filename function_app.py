@@ -74,6 +74,8 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 def agen(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
 
+
+    return func.HttpResponse("assignment_text", mimetype="text/html")
     user_input = req.params.get('question')
     if not user_input:
         try:
@@ -82,12 +84,12 @@ def agen(req: func.HttpRequest) -> func.HttpResponse:
             req_body = None 
         else:
             user_input = req_body.get('question')
-
-    if not user_input:
-        return func.HttpResponse(
-            "Please pass an assignment question on the query string or in the request body",
-            status_code=400
-        )
+        if not user_input:
+            return func.HttpResponse(
+                "Please pass an assignment question on the query string or in the request body",
+                status_code=400
+            )
+    template = req.params.get('template')
 
     r = Rake()
     r.extract_keywords_from_text(user_input)
@@ -156,6 +158,16 @@ def agen(req: func.HttpRequest) -> func.HttpResponse:
     keywords = [re.sub(r'[^\x00-\x7F]+', '', kw) for kw in keywords]
     keywords = [kw.encode('utf-8', 'ignore').decode('utf-8') for kw in keywords]
 
+    
+    images = f"<h2>Images:</h2>\n{image_grid_html}"
+    if (template == "e"):
+        images = ""
+    elif (template == "m"):
+        pass
+    elif (template == "h"):
+        pass
+    elif (template == "b"):
+        pass
     assignment_text = f"""
     <html>
     <head>
@@ -205,8 +217,7 @@ def agen(req: func.HttpRequest) -> func.HttpResponse:
     <h1>Topic: {', '.join(keywords)}</h1>
     <h2>Relevant Content:</h2>
     {relevant_content}
-    <h2>Images:</h2>
-    {image_grid_html}
+    {images}
     <h2>References:</h2>
     <ul>
     {"".join(f'<li><a href="{reference}">{reference}</a></li>' for reference in references)}
@@ -216,4 +227,4 @@ def agen(req: func.HttpRequest) -> func.HttpResponse:
     """
     assignment_text = assignment_text.encode('utf-8', 'ignore').decode('utf-8')
 
-    return func.HttpResponse(assignment_text, mimetype="text/html")
+        
