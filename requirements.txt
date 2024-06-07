@@ -12,3 +12,4 @@ chardet
 PyPDF2
 azure-functions
 asyncio
+reportlab
