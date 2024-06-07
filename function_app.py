@@ -12,6 +12,9 @@ import re
 import azure.functions as func
 import PyPDF2
 import io
+from io import BytesIO
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import inch
 
 # Set NLTK data directory to a temporary directory
 nltk_data_dir = '/tmp/nltk_data'
@@ -225,4 +228,62 @@ def agen(req: func.HttpRequest) -> func.HttpResponse:
     """
     assignment_text = assignment_text.encode('utf-8', 'ignore').decode('utf-8')
 
-    return func.HttpResponse(assignment_text, mimetype="text/html")
+    headers = {
+        'content_type':'application/pdf'
+    }
+    pdf = html_to_pdf(assignment_text)
+    logging.info('Pdf generated')
+    return func.HttpResponse(
+        body=pdf,
+        status_code=200,
+        headers=headers
+    )
+
+
+
+
+def html_to_pdf(html_string):
+    """
+    Converts an HTML string to a PDF document using ReportLab.
+
+    Args:
+        html_string (str): The HTML content to be converted.
+        output_filename (str): The filename for the generated PDF.
+    """
+    # Create a BytesIO object to store the PDF data in memory
+    pdf_buffer = BytesIO()
+
+    # Create a canvas object for drawing on the PDF
+    pdf = canvas.Canvas(pdf_buffer, pagesize=(8.5 * inch, 11 * inch))
+
+    # Current Y position on the PDF for content placement
+    y_pos = 11 * inch
+
+    # Loop through each line in the HTML string
+    for line in html_string.splitlines():
+        # Remove HTML tags for basic text processing
+        text = line.strip().strip('<>')
+
+        # Check for heading tags (h1, h2, etc.) and adjust font size/style
+        if line.startswith('<h1>'):
+            pdf.setFont("Helvetica-Bold", 16)
+            y_pos -= 0.5 * inch  # Add some space after headings
+        elif line.startswith('<h2>'):
+            pdf.setFont("Helvetica-Bold", 14)
+            y_pos -= 0.3 * inch
+        elif line.startswith('<b>'):
+            pdf.setFont("Helvetica-Bold", 12)
+        elif line.startswith('<i>'):
+            pdf.setFont("Helvetica-Italic", 12)
+        else:
+            pdf.setFont("Helvetica", 12)
+
+        # Draw the text on the PDF with a margin and adjust Y position
+        pdf.drawString(1 * inch, y_pos, text)
+        y_pos -= 0.2 * inch  # Adjust Y position for next line
+
+    # Save the PDF content from the buffer to a file
+    pdf.save()
+
+    # Optionally, return the PDF data in memory (for further processing)
+    return pdf_buffer.getvalue()
