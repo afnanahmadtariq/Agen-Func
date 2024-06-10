@@ -219,7 +219,7 @@ def agen(req: func.HttpRequest) -> func.HttpResponse:
     """
     # assignment_text = assignment_text.encode('utf-8', 'ignore').decode('utf-8')
     headers = {
-        'Title': 'Ali BAba'
+        'title': html.escape(user_input)
     }
     return func.HttpResponse(
         assignment_text, 
