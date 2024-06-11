@@ -200,6 +200,7 @@ def agen(req: func.HttpRequest) -> func.HttpResponse:
             p {{
                 margin-top: 12px;
                 margin-bottom: 12px;
+                justify-content: space-betweeen;
             }}
             .image-grid {{
                 display: grid;
@@ -213,7 +214,7 @@ def agen(req: func.HttpRequest) -> func.HttpResponse:
         </style>
     </head>
     <body>
-    <h1>Topic: {', '.join(keywords)}</h1>
+    <h1>Topic: {user_input}</h1>
     <h2>Relevant Content:</h2>
     {relevant_content}
     <h2>Images:</h2>
