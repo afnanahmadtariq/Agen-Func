@@ -178,6 +178,7 @@ def agen(req: func.HttpRequest) -> func.HttpResponse:
                 padding: 20px;
                 border: 2px solid #000;
                 text-align: justify;
+                justify-content: space-betweeen;
             }}
             h1 {{
                 font-size: 20px;
@@ -200,7 +201,6 @@ def agen(req: func.HttpRequest) -> func.HttpResponse:
             p {{
                 margin-top: 12px;
                 margin-bottom: 12px;
-                justify-content: space-betweeen;
             }}
             .image-grid {{
                 display: grid;
